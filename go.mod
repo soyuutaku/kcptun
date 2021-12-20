@@ -13,3 +13,5 @@ require (
 )
 
 go 1.14
+
+replace github.com/xtaci/kcp-go/v5 v5.6.1 => github.com/soyuutaku/kcp-go/v5 v5.6.2-0.20211223090939-0f7ade6ea5f1

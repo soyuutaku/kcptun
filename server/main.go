@@ -272,6 +272,20 @@ func main() {
 			Value: "", // when the value is not empty, the config path must exists
 			Usage: "config from json file, which will override the command from shell",
 		},
+		cli.BoolFlag{
+			Name:  "c2tcp, x",
+			Usage: "to enable c2tcp or not",
+		},
+		cli.Float64Flag{
+			Name:  "alpha",
+			Value: 1.2,
+			Usage: "c2tcp initial alpha, default: 1.2",
+		},
+		cli.Int64Flag{
+			Name:  "xtarget, xt",
+			Value: 30,
+			Usage: "c2tcp target rtt, default: 30",
+		},
 	}
 	myApp.Action = func(c *cli.Context) error {
 		config := Config{}
@@ -303,6 +317,9 @@ func main() {
 		config.Pprof = c.Bool("pprof")
 		config.Quiet = c.Bool("quiet")
 		config.TCP = c.Bool("tcp")
+		config.C2tcp = c.Bool("c2tcp")
+		config.Alpha = c.Float64("alpha")
+		config.Xtarget = c.Int("xtarget")
 
 		if c.String("c") != "" {
 			//Now only support json config file
@@ -350,6 +367,9 @@ func main() {
 		log.Println("pprof:", config.Pprof)
 		log.Println("quiet:", config.Quiet)
 		log.Println("tcp:", config.TCP)
+		log.Println("C2tcp:", config.C2tcp)
+		log.Println("C2tcp target:", config.Xtarget)
+		log.Println("C2tcp alpha:", config.Alpha)
 
 		// parameters check
 		if config.SmuxVer > maxSmuxVer {
@@ -418,6 +438,7 @@ func main() {
 					conn.SetMtu(config.MTU)
 					conn.SetWindowSize(config.SndWnd, config.RcvWnd)
 					conn.SetACKNoDelay(config.AckNodelay)
+					conn.SetC2tcpPara(config.C2tcp, float32(config.Alpha), uint32(config.Xtarget))
 
 					if config.NoComp {
 						go handleMux(conn, &config)

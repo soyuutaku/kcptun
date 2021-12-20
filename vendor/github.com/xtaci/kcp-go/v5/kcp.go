@@ -35,7 +35,7 @@ const (
 var refTime time.Time = time.Now()
 
 // currentMs returns current elapsed monotonic milliseconds since program startup
-func currentMs() uint32 { return uint32(time.Since(refTime) / time.Millisecond) }
+func currentMs() uint32 { return uint32(time.Since(refTime).Milliseconds()) }
 
 // output_callback is a prototype which ought capture conn and call conn.Write
 type output_callback func(buf []byte, size int)
@@ -155,6 +155,8 @@ type KCP struct {
 	buffer   []byte
 	reserved int
 	output   output_callback
+
+	c2tcp // c2xp info
 }
 
 type ackItem struct {
@@ -183,6 +185,7 @@ func NewKCP(conv uint32, output output_callback) *KCP {
 	kcp.ssthresh = IKCP_THRESH_INIT
 	kcp.dead_link = IKCP_DEADLINK
 	kcp.output = output
+	kcp.c2tcp_initial()
 	return kcp
 }
 
@@ -520,6 +523,33 @@ func (kcp *KCP) parse_data(newseg segment) bool {
 	return repeat
 }
 
+func (kcp *KCP) update_cwnd(snd_una uint32) {
+	if kcp.nocwnd != 0 || _itimediff(kcp.snd_una, snd_una) <= 0 || kcp.cwnd >= kcp.rmt_wnd {
+		return
+	}
+	mss := kcp.mss
+	if kcp.cwnd < kcp.ssthresh {
+		kcp.cwnd++
+		kcp.incr += mss
+	} else {
+		if kcp.incr < mss {
+			kcp.incr = mss
+		}
+		kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
+		if (kcp.cwnd+1)*mss <= kcp.incr {
+			if mss > 0 {
+				kcp.cwnd = (kcp.incr + mss - 1) / mss
+			} else {
+				kcp.cwnd = kcp.incr + mss - 1
+			}
+		}
+	}
+	if kcp.cwnd > kcp.rmt_wnd {
+		kcp.cwnd = kcp.rmt_wnd
+		kcp.incr = kcp.rmt_wnd * mss
+	}
+}
+
 // Input a packet into kcp state machine.
 //
 // 'regular' indicates it's a real data packet from remote, and it means it's not generated from ReedSolomon
@@ -536,6 +566,7 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 	var flag int
 	var inSegs uint64
 	var windowSlides bool
+	now := currentMs()
 
 	for {
 		var ts, sn, length, una, conv uint32
@@ -581,6 +612,11 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 			kcp.parse_fastack(sn, ts)
 			flag |= 1
 			latest = ts
+
+			kcp.update_cwnd(snd_una)
+			if rtt := _itimediff(now, ts); rtt >= 0 && regular {
+				kcp.c2tcp_detect_condition(rtt)
+			}
 		} else if cmd == IKCP_CMD_PUSH {
 			repeat := true
 			if _itimediff(sn, kcp.rcv_nxt+kcp.rcv_wnd) < 0 {
@@ -619,38 +655,9 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 	// update rtt with the latest ts
 	// ignore the FEC packet
 	if flag != 0 && regular {
-		current := currentMs()
-		if _itimediff(current, latest) >= 0 {
-			kcp.update_ack(_itimediff(current, latest))
-		}
-	}
-
-	// cwnd update when packet arrived
-	if kcp.nocwnd == 0 {
-		if _itimediff(kcp.snd_una, snd_una) > 0 {
-			if kcp.cwnd < kcp.rmt_wnd {
-				mss := kcp.mss
-				if kcp.cwnd < kcp.ssthresh {
-					kcp.cwnd++
-					kcp.incr += mss
-				} else {
-					if kcp.incr < mss {
-						kcp.incr = mss
-					}
-					kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
-					if (kcp.cwnd+1)*mss <= kcp.incr {
-						if mss > 0 {
-							kcp.cwnd = (kcp.incr + mss - 1) / mss
-						} else {
-							kcp.cwnd = kcp.incr + mss - 1
-						}
-					}
-				}
-				if kcp.cwnd > kcp.rmt_wnd {
-					kcp.cwnd = kcp.rmt_wnd
-					kcp.incr = kcp.rmt_wnd * mss
-				}
-			}
+		rtt := _itimediff(now, latest)
+		if rtt >= 0 {
+			kcp.update_ack(rtt)
 		}
 	}
 
