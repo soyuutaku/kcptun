@@ -38,7 +38,7 @@ github.com/tjfoc/gmsm/sm4
 # github.com/urfave/cli v1.21.0
 ## explicit
 github.com/urfave/cli
-# github.com/xtaci/kcp-go/v5 v5.6.1 => github.com/soyuutaku/kcp-go/v5 v5.6.2-0.20211223090939-0f7ade6ea5f1
+# github.com/xtaci/kcp-go/v5 v5.6.1 => github.com/soyuutaku/kcp-go/v5 v5.6.2-0.20211224045640-b0bbd5fec358
 ## explicit
 github.com/xtaci/kcp-go/v5
 # github.com/xtaci/smux v1.5.16

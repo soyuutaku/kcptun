@@ -245,7 +245,11 @@ func main() {
 		},
 		cli.BoolFlag{
 			Name:  "c2tcp, x",
-			Usage: "to enable c2tcp or not",
+			Usage: "enable c2tcp",
+		},
+		cli.BoolFlag{
+			Name:  "c2tcplog, xlog",
+			Usage: "enable log for c2tcp",
 		},
 		cli.Float64Flag{
 			Name:  "alpha",
@@ -291,6 +295,7 @@ func main() {
 		config.Quiet = c.Bool("quiet")
 		config.TCP = c.Bool("tcp")
 		config.C2tcp = c.Bool("c2tcp")
+		config.C2tcpLog = c.Bool("c2tcplog")
 		config.Alpha = c.Float64("alpha")
 		config.Xtarget = c.Int("xtarget")
 
@@ -347,6 +352,7 @@ func main() {
 		log.Println("quiet:", config.Quiet)
 		log.Println("tcp:", config.TCP)
 		log.Println("C2tcp:", config.C2tcp)
+		log.Println("C2tcp log enable:", config.C2tcpLog)
 		log.Println("C2tcp target:", config.Xtarget)
 		log.Println("C2tcp alpha:", config.Alpha)
 
@@ -400,7 +406,7 @@ func main() {
 			kcpconn.SetWindowSize(config.SndWnd, config.RcvWnd)
 			kcpconn.SetMtu(config.MTU)
 			kcpconn.SetACKNoDelay(config.AckNodelay)
-			kcpconn.SetC2tcpPara(config.C2tcp, float32(config.Alpha), uint32(config.Xtarget))
+			kcpconn.SetC2tcpPara(config.C2tcp, float32(config.Alpha), uint32(config.Xtarget), config.C2tcpLog)
 
 			if err := kcpconn.SetDSCP(config.DSCP); err != nil {
 				log.Println("SetDSCP:", err)

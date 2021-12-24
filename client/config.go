@@ -38,6 +38,7 @@ type Config struct {
 	Quiet        bool    `json:"quiet"`
 	TCP          bool    `json:"tcp"`
 	C2tcp        bool    `json:"c2tcp"`
+	C2tcpLog     bool    `json:"c2tcplog"`
 	Alpha        float64 `json:"alpha"`
 	Xtarget      int     `json:"xtarget"`
 }

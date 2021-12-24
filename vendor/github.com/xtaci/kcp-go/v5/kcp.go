@@ -2,6 +2,7 @@ package kcp
 
 import (
 	"encoding/binary"
+	"log"
 	"sync/atomic"
 	"time"
 )
@@ -265,8 +266,12 @@ func (kcp *KCP) Recv(buffer []byte) (n int) {
 
 	// merge fragment
 	count := 0
+	now := currentMs()
 	for k := range kcp.rcv_queue {
 		seg := &kcp.rcv_queue[k]
+		if kcp.c2tcp_log_enable {
+			log.Println("Segment ", seg.sn, "in recv_queue:", _itimediff(now, seg.resendts), "ms")
+		}
 		copy(buffer, seg.data)
 		buffer = buffer[len(seg.data):]
 		n += len(seg.data)
@@ -353,6 +358,7 @@ func (kcp *KCP) Send(buffer []byte) int {
 		count = 1
 	}
 
+	current := currentMs()
 	for i := 0; i < count; i++ {
 		var size int
 		if len(buffer) > int(kcp.mss) {
@@ -367,6 +373,7 @@ func (kcp *KCP) Send(buffer []byte) int {
 		} else { // stream mode
 			seg.frg = 0
 		}
+		seg.ts = current
 		kcp.snd_queue = append(kcp.snd_queue, seg)
 		buffer = buffer[size:]
 	}
@@ -630,6 +637,7 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 					seg.ts = ts
 					seg.sn = sn
 					seg.una = una
+					seg.resendts = now
 					seg.data = data[:length] // delayed data copying
 					repeat = kcp.parse_data(seg)
 				}
@@ -768,6 +776,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 
 	// sliding window, controlled by snd_nxt && sna_una+cwnd
 	newSegsCount := 0
+	current := currentMs()
 	for k := range kcp.snd_queue {
 		if _itimediff(kcp.snd_nxt, kcp.snd_una+cwnd) >= 0 {
 			break
@@ -777,6 +786,9 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 		newseg.cmd = IKCP_CMD_PUSH
 		newseg.sn = kcp.snd_nxt
 		kcp.snd_buf = append(kcp.snd_buf, newseg)
+		if kcp.c2tcp_log_enable {
+			log.Println("Segment ", newseg.sn, "in snd_queue:", _itimediff(current, newseg.ts), "ms")
+		}
 		kcp.snd_nxt++
 		newSegsCount++
 	}
@@ -791,7 +803,6 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 	}
 
 	// check for retransmissions
-	current := currentMs()
 	var change, lostSegs, fastRetransSegs, earlyRetransSegs uint64
 	minrto := int32(kcp.interval)
 
@@ -834,6 +845,9 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 
 		if needsend {
 			current = currentMs()
+			if kcp.c2tcp_log_enable && segment.xmit != 0 {
+				log.Println("Segment ", segment.sn, "resent:", _itimediff(current, segment.ts), "ms")
+			}
 			segment.xmit++
 			segment.ts = current
 			segment.wnd = seg.wnd
