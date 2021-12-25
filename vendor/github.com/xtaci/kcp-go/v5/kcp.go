@@ -804,6 +804,7 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 
 	// check for retransmissions
 	var change, lostSegs, fastRetransSegs, earlyRetransSegs uint64
+	current = currentMs()
 	minrto := int32(kcp.interval)
 
 	ref := kcp.snd_buf[:len(kcp.snd_buf)] // for bounds check elimination
@@ -818,6 +819,9 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 			segment.rto = kcp.rx_rto
 			segment.resendts = current + segment.rto
 		} else if segment.fastack >= resent { // fast retransmit
+			if kcp.c2tcp_log_enable {
+				log.Println("Segment ", segment.sn, "fastAck ReTX:", _itimediff(current, segment.ts), "ms, xmit:", segment.xmit)
+			}
 			needsend = true
 			segment.fastack = 0
 			segment.rto = kcp.rx_rto
@@ -825,6 +829,9 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 			change++
 			fastRetransSegs++
 		} else if segment.fastack > 0 && newSegsCount == 0 { // early retransmit
+			if kcp.c2tcp_log_enable {
+				log.Println("Segment ", segment.sn, "early ReTX:", _itimediff(current, segment.ts), "ms, xmit:", segment.xmit)
+			}
 			needsend = true
 			segment.fastack = 0
 			segment.rto = kcp.rx_rto
@@ -832,6 +839,9 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 			change++
 			earlyRetransSegs++
 		} else if _itimediff(current, segment.resendts) >= 0 { // RTO
+			if kcp.c2tcp_log_enable {
+				log.Println("Segment ", segment.sn, "RTO ReTX:", _itimediff(current, segment.ts), "ms, xmit:", segment.xmit, ", rto:", segment.rto)
+			}
 			needsend = true
 			if kcp.nodelay == 0 {
 				segment.rto += kcp.rx_rto
@@ -845,9 +855,6 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 
 		if needsend {
 			current = currentMs()
-			if kcp.c2tcp_log_enable && segment.xmit != 0 {
-				log.Println("Segment ", segment.sn, "resent:", _itimediff(current, segment.ts), "ms")
-			}
 			segment.xmit++
 			segment.ts = current
 			segment.wnd = seg.wnd
